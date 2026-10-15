@@ -1,66 +1,57 @@
-import { useEffect } from "react";
-import { useNavigate, useParams } from "react-router";
-import type { TipoProdutoJ } from "../../types/types";
 import { useForm } from "react-hook-form";
+import type { TipoProdutoJ } from "../../types/types";
+import { useNavigate } from "react-router";
+import { useState, type ChangeEvent } from "react";
 
-export default function EditarProdutos() {
-  //Modificar o título da página;
-  document.title = "Editar Produtos";
+const API_URL = import.meta.env.VITE_API_URL;
 
+export default function CadProduto() {
+
+      //Modificar o título da página;
+  document.title = "Cadastrar Produtos";
   const navigate = useNavigate();
 
+  //RECIPIENTE DA IMAGEM
+   const[lendoImagem,setLendoImagem] = useState<boolean>(false);
+
   //Declarando os componentes do hookForm
-  const{register,handleSubmit,reset, formState:{errors}} = useForm<TipoProdutoJ>({
+  const{register,handleSubmit,setValue,watch, formState:{errors,isSubmitting}} = useForm<TipoProdutoJ>({
     defaultValues:{ id: "", nome: "", preco: 0, estoque: 0,avatar: "" },mode:"onChange"});
+const imagem = watch("avatar");
 
-    //Recuperar o parâmetro da rota através do hook useParams, desestruturando o objeto.
-    const { id } = useParams<{id:string}>();
-
-    useEffect(() => {
-        //Simulando a requisição para o backend
-
-        const carregaProduto = async () => {
-
-            try {
-
-                const resposta = await fetch(`http://localhost:3001/produtos/${id}`);
-
-                if (!resposta.ok) {
-                    throw new Error(`Produto não encontrado: ${resposta.status} - ${resposta.statusText}`)
-                }
-
-                const data: TipoProdutoJ = await resposta.json();
-                console.log(data);
-                reset(data);
-                
-
-            } catch (error) {
-                console.error(error);
-            }
-        }
-
-        carregaProduto();
-
-    }, []);
-
-
-    const handleUpdate = async (data:TipoProdutoJ)=>{
+    const onSubmit = async (data:TipoProdutoJ)=>{
       try {
 
-        const response = await fetch(`http://localhost:3001/produtos/${data.id}` , {
-          method:"PUT",
+        if (lendoImagem) {
+          alert("Aguarde a leitura da imagem!");
+          return;
+        }
+
+        if(!data.avatar){
+          alert("Selecione uma imagem para o produto!");
+        }
+
+        console.log("OBJETO: ",data);
+        const response = await fetch(API_URL , {
+          method:"POST",
           headers:{
-            "Content-Type": "application/json"
+            "Content-Type": "text/plain;charset=utf-8"
           },
-          body: JSON.stringify(data)
+          body: JSON.stringify({action: "POST", ...data})
         });
 
               if (!response.ok) {
-                  throw new Error(`A atualização falhou: ${response.status} - ${response.statusText}`)
+                  throw new Error(`O cadastro falhou: ${response.status} - ${response.statusText}`)
+              }
+
+              const resultado = await response.json();
+
+              if (resultado.status === "error") {
+                  throw new Error(`O cadastro falhou: ${resultado.message}`);
               }
 
               //MSG de SUCESSO
-              alert("Atualização realizada com sucesso!");
+              alert("Cadastro realizado com sucesso!");
               //Redirecionando para a página de produtos
               navigate("/produtos");
 
@@ -69,11 +60,53 @@ export default function EditarProdutos() {
       }
     }
 
+    const selecionaImagem = (event:ChangeEvent<HTMLInputElement>)=>{
+
+      const arquivo = event.target.files?.[0];
+
+      if(!arquivo){
+        return;
+      }
+
+      if(!arquivo.type.startsWith("image/")){
+        alert("Selecione um arquivo de imagem!");
+        event.target.value = "";
+        return;
+      }
+
+      if(arquivo.size > 1024 * 1024){
+        alert("A imagem deve ter no máximo 1 MB!");
+        event.target.value = "";
+        return;
+      }
+
+      const leitor = new FileReader();
+
+      setLendoImagem(true);
+
+      leitor.onload = ()=>{
+        if(typeof leitor.result === "string"){
+          setValue("avatar", leitor.result,
+            {shouldDirty:true,
+            shouldValidate:true
+          });
+         }
+         setLendoImagem(false);
+      };
+
+      leitor.onerror = ()=>{
+        alert("Não foi possível ler a imagem!");
+        setLendoImagem(false);
+      };
+
+      leitor.readAsDataURL(arquivo);
+    }
+
   return (
     <main>
-      <h2>Editar Produtos</h2>
-      <div>
-        <form onSubmit={handleSubmit(handleUpdate)}>
+        <h2>Cadastro de Produtos</h2>
+        <div>
+        <form onSubmit={handleSubmit(onSubmit)}>
           <fieldset>
             <legend>Dados do Produto</legend>
             <div>
@@ -90,9 +123,25 @@ export default function EditarProdutos() {
               <label htmlFor="estoque">Estoque </label>
               <input type="number" step={1} {...register("estoque",{required: "Preenchimento do campo é obrigatório!", min:{value:1,message:"O valor minímo é 1"}})}/>
               {errors.estoque && <span style={{color:"#ff0000"}}>{errors.estoque.message}</span> }
-            </div>            
+            </div>
+
             <div>
-              <button type="submit">Editar</button>
+              <label htmlFor="arquivoImg">Avatar Produto</label>
+              <input type="file" accept="image/" onChange={selecionaImagem} disabled={lendoImagem} />
+              <input type="hidden" {...register("avatar")}/>
+              {lendoImagem && <p>Lendo imagem...</p>}
+
+              {imagem && (
+                <div>
+                  <img 
+                    src={imagem}
+                    alt="Prévia da imagem do produto!"
+                    width={40} />
+                </div>
+              )}
+            </div>
+            <div>
+              <button type="submit" disabled={lendoImagem || isSubmitting}>Cadastrar</button>
             </div>
           </fieldset>
         </form>
